@@ -1,0 +1,124 @@
+apiVersion: v1
+kind: Template
+labels:
+  template: redis
+metadata:
+  creationTimestamp: null
+  name: redis
+  annotations:
+    openshift.io/display-name: redis
+    description: Start a redis instance.
+    tags: redis
+
+objects:
+- apiVersion: v1
+  kind: Secret
+  metadata:
+    annotations:
+      template.openshift.io/expose-password: '{.data[''database-password'']}'
+    labels:
+      template: redis
+    name: redis
+- apiVersion: v1
+  kind: Service
+  metadata:
+    annotations:
+      template.openshift.io/expose-uri: redis://{.spec.clusterIP}:{.spec.ports[?(.name=="redis")].port}
+    labels:
+      template: redis
+    name: redis
+  spec:
+    ports:
+    - name: redis
+      nodePort: 0
+      port: 6379
+      protocol: TCP
+      targetPort: 6379
+    selector:
+      name: redis
+    sessionAffinity: None
+    type: ClusterIP
+  status:
+    loadBalancer: {}
+- apiVersion: apps.openshift.io/v1
+  kind: DeploymentConfig
+  metadata:
+    annotations:
+      template.alpha.openshift.io/wait-for-ready: "true"
+    labels:
+      template: redis
+    name: redis
+  spec:
+    replicas: 1
+    selector:
+      name: redis
+    strategy:
+      type: Recreate
+    template:
+      metadata:
+        labels:
+          name: redis
+      spec:
+        containers:
+        - capabilities: {}
+          env:
+          - name: REDIS_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                key: database-password
+                name: redis
+          image: ''
+          args: ["--maxmemory 500mb", "--maxmemory-policy volatile-lru", "--requirepass $(REDIS_PASSWORD)"]
+          imagePullPolicy: IfNotPresent
+          livenessProbe:
+            initialDelaySeconds: 30
+            tcpSocket:
+              port: 6379
+            timeoutSeconds: 1
+          name: redis
+          ports:
+          - containerPort: 6379
+            protocol: TCP
+          readinessProbe:
+            exec:
+              command:
+              - redis-cli
+              - "-h"
+              - 127.0.0.1
+              - "-a"
+              - $REDIS_PASSWORD
+              - "--no-auth-warning"
+              - ping
+            initialDelaySeconds: 5
+            timeoutSeconds: 1
+          resources:
+            requests:
+              cpu: 50m
+              memory: 2Gi
+            limits:
+              cpu: 100m
+              memory: 3Gi
+          securityContext:
+            capabilities: {}
+            privileged: false
+          terminationMessagePath: /dev/termination-log
+          volumeMounts:
+          - mountPath: /var/lib/redis/data
+            name: data
+        dnsPolicy: ClusterFirst
+        restartPolicy: Always
+        volumes:
+        - name: data
+          emptyDir: {}
+    triggers:
+    - imageChangeParams:
+        automatic: true
+        containerNames:
+        - redis
+        from:
+          kind: ImageStreamTag
+          name: redis:6.2
+        lastTriggeredImage: ""
+      type: ImageChange
+    - type: ConfigChange
+  status: {}
