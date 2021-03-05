@@ -67,8 +67,10 @@ objects:
               secretKeyRef:
                 key: database-password
                 name: redis
+          - name: REDIS_DB_LOCATION
+            value: '/var/lib/redis/data'
           image: ''
-          args: ["--maxmemory 500mb", "--maxmemory-policy volatile-lru", "--requirepass $(REDIS_PASSWORD)"]
+          args: ["--maxmemory 500mb", "--maxmemory-policy volatile-lru", "--appendonly no", "--dir $(REDIS_DB_LOCATION)", "--requirepass $(REDIS_PASSWORD)"]
           imagePullPolicy: IfNotPresent
           livenessProbe:
             initialDelaySeconds: 30
